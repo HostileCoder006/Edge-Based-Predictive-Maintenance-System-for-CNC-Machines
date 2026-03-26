@@ -89,7 +89,7 @@ def calculate_health_score(data, anomalies):
 
     if score >= 90:
         status = "Healthy"
-    elif score >= 70:
+    elif score >= 50:
         status = "Warning"
     else:
         status = "Critical"

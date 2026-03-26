@@ -71,8 +71,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Score Legend**")
     st.markdown("🟢 90–100 → Healthy")
-    st.markdown("🟡 70–89  → Warning")
-    st.markdown("🔴 0–69   → Critical")
+    st.markdown("🟡 50–89  → Warning")
+    st.markdown("🔴 10–49  → Critical")
+    st.markdown("⛔ Below 10 → Auto Shutdown")
 
     st.markdown("---")
     st.markdown(f"**Update Interval:** {UPDATE_INTERVAL_SEC}s")
@@ -91,9 +92,16 @@ st.markdown("---")
 col_btn, col_status = st.columns([2, 5])
 
 with col_btn:
-    if st.button("▶ Start Monitoring" if not st.session_state.running else "⏹ Stop Monitoring"):
-        st.session_state.running = not st.session_state.running
-        st.rerun()
+    if st.session_state.shutdown:
+        # During shutdown show a dedicated Reset button instead of Start/Stop
+        if st.button("🔄 Reset & Restart"):
+            st.session_state.shutdown = False
+            st.session_state.running  = True
+            st.rerun()
+    else:
+        if st.button("▶ Start Monitoring" if not st.session_state.running else "⏹ Stop Monitoring"):
+            st.session_state.running = not st.session_state.running
+            st.rerun()
 
 with col_status:
     if st.session_state.running:

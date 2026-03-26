@@ -65,6 +65,10 @@ if "latest" not in st.session_state:
 if "chart_placeholder" not in st.session_state:
     st.session_state.chart_placeholder = None
 
+# Shutdown flag – set to True when health score < 20
+if "shutdown" not in st.session_state:
+    st.session_state.shutdown = False
+
 # ================================================================
 #  SIDEBAR
 # ================================================================
@@ -130,6 +134,11 @@ if st.session_state.running:
         "score": score, "status": status,
         "suggestions": suggestions,
     }
+
+    # ── SHUTDOWN CHECK ──────────────────────────────────────
+    if score < 10:
+        st.session_state.running  = False
+        st.session_state.shutdown = True
 
     # Append to rolling history
     new_row = pd.DataFrame([{
@@ -252,6 +261,19 @@ with chart_area.container():
 #  This is placed at the very bottom so the full UI renders first,
 #  then we wait, then trigger the next cycle.
 # ================================================================
-if st.session_state.running:
+if st.session_state.shutdown:
+    st.markdown("""
+<div style="background:#5c0000;border:3px solid #ff1a1a;border-radius:6px;padding:1.2rem 1.5rem;margin-top:1rem;">
+    <span style="font-size:1.6rem;font-weight:900;color:#ff4444;letter-spacing:0.08em;">
+        🚨 &nbsp; SYSTEM SHUTDOWN
+    </span><br>
+    <span style="font-size:1rem;color:#ffaaaa;font-family:monospace;">
+        Health score dropped below 10/100 — machine halted automatically.<br>
+        Do NOT restart until a full inspection is completed.
+    </span>
+</div>
+""", unsafe_allow_html=True)
+
+elif st.session_state.running:
     time.sleep(UPDATE_INTERVAL_SEC)
     st.rerun()

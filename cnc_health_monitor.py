@@ -1,15 +1,3 @@
-"""
-========================================================
-  Edge-Based Early Failure Warning System
-  Health Scoring for CNC Machines (Enhanced Version)
-========================================================
-  Features:
-  - Vibration, Temperature, Pressure, Sound sensors
-  - Improved health scoring
-  - Maintenance suggestions
-========================================================
-"""
-
 import random
 import time
 import sys

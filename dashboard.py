@@ -1,14 +1,3 @@
-"""
-================================================================
-  CNC Machine – Edge-Based Early Failure Warning System
-  Streamlit Dashboard  ·  dashboard.py
-================================================================
-  Run with:      streamlit run dashboard.py
-  Requires:      cnc_health_monitor.py + ml_model.py in same folder
-  Install deps:  pip install streamlit pandas streamlit-autorefresh scikit-learn
-================================================================
-"""
-
 import time
 import pandas as pd
 import streamlit as st

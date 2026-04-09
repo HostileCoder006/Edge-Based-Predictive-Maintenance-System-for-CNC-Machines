@@ -1,9 +1,20 @@
-
+"""
+================================================================
+  CNC Machine – Edge-Based Early Failure Warning System
+  Streamlit Dashboard  ·  dashboard.py
+================================================================
+  Run with:      streamlit run dashboard.py
+  Requires:      cnc_health_monitor.py + ml_model.py in same folder
+  Install deps:  pip install streamlit pandas streamlit-autorefresh scikit-learn
+================================================================
+"""
 
 import time
 import pandas as pd
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
+from ml_model import load_model
 from cnc_health_monitor import (
     generate_sensor_data,
     detect_anomalies,
@@ -30,30 +41,60 @@ st.set_page_config(
 
 # ================================================================
 #  GLOBAL CSS
-#  Orbitron  → all numeric readouts  (futuristic, perfectly legible)
-#  Inter     → all prose / labels    (clean, modern, highly readable)
 # ================================================================
 st.markdown("""
 <style>
-/* ── Fonts ─────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── Base ───────────────────────────────────────────────────── */
-html, body, [class*="css"] {
+html, body, .stApp {
     background-color: #080c12 !important;
     color: #cdd6e0;
     font-family: 'Inter', sans-serif;
     font-size: 15px;
 }
 
-/* ── Sidebar ────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #0b0f18 0%, #080c12 100%) !important;
     border-right: 1px solid #1a2235;
 }
 [data-testid="stSidebar"] * { font-family: 'Inter', sans-serif; }
 
-/* ── Tabs ───────────────────────────────────────────────────── */
+/* Keep Streamlit/Material icon ligatures from being shown as text (e.g. keyboard_double_*) */
+span.material-symbols-rounded,
+span.material-symbols-outlined,
+span.material-symbols-sharp,
+span.material-icons,
+span.material-icons-round,
+span.material-icons-outlined,
+span.material-icons-sharp,
+i.material-icons,
+i.material-icons-round,
+i.material-icons-outlined,
+i.material-icons-sharp,
+[class*="material-symbols"],
+[class*="material-icons"],
+[data-baseweb="icon"] span {
+    font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+}
+
+/* Hide sidebar control ligature text like "keyboard_double_*" while preserving button behavior */
+[data-testid="stSidebarCollapseButton"] span[class*="material"],
+[data-testid="stSidebarCollapsedControl"] span[class*="material"],
+[data-testid="stSidebarResizer"] span[class*="material"] {
+    display: none !important;
+}
+
+/* Final fallback: hide Streamlit sidebar collapse controls entirely */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
+    display: none !important;
+}
+
 [data-testid="stTabs"] { border-bottom: 1px solid #1a2235; }
 [data-testid="stTabs"] button {
     font-family: 'Inter', sans-serif;
@@ -71,7 +112,6 @@ html, body, [class*="css"] {
     border-bottom: 2px solid #4d9fff !important;
 }
 
-/* ── Buttons ────────────────────────────────────────────────── */
 .stButton > button {
     font-family: 'Inter', sans-serif;
     font-weight: 600;
@@ -93,10 +133,8 @@ html, body, [class*="css"] {
     transform: translateY(-1px);
 }
 
-/* ── Divider ────────────────────────────────────────────────── */
 hr { border-color: #1a2235 !important; margin: 1.2rem 0 !important; }
 
-/* ── Scrollbar ──────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: #080c12; }
 ::-webkit-scrollbar-thumb { background: #1a2235; border-radius: 3px; }
@@ -111,14 +149,52 @@ if "running"           not in st.session_state: st.session_state.running        
 if "cycle"             not in st.session_state: st.session_state.cycle             = 0
 if "history"           not in st.session_state: st.session_state.history           = pd.DataFrame(columns=["Cycle","Vibration","Temperature","Pressure","Sound","Health"])
 if "latest"            not in st.session_state: st.session_state.latest            = None
-if "chart_placeholder" not in st.session_state: st.session_state.chart_placeholder = None
 if "shutdown"          not in st.session_state: st.session_state.shutdown          = False
 
+if "ml_model" not in st.session_state:
+    with st.spinner("⚙ Training ML model on startup…"):
+        st.session_state.ml_model = load_model()
+
 # ================================================================
-#  REUSABLE STYLE HELPERS
+#  STYLE HELPERS
 # ================================================================
+def ml_insight_top_sensor_live(model, data: dict, rule_health: float) -> str | None:
+    """
+    Counterfactual RF insight: which sensor most pulls ML health down vs nominal.
+    Returns None when rule + ML agree things are healthy or the effect is too small
+    (avoids bogus “degradation” at health 100).
+    """
+    names = ["Vibration", "Temperature", "Pressure", "Sound"]
+    keys = ["vibration", "temperature", "pressure", "sound"]
+    healthy_ref = {
+        "vibration": 2.5,
+        "temperature": 50.0,
+        "pressure": 17.5,
+        "sound": 60.0,
+    }
+    MIN_GAIN = 2.0  # points of predicted health; must clear this to name a stressor
+
+    def as_row(d):
+        return [[d["vibration"], d["temperature"], d["pressure"], d["sound"]]]
+
+    ml_pred = max(0.0, min(100.0, float(model.predict(as_row(data))[0])))
+    gains = []
+    for k in keys:
+        alt = dict(data)
+        alt[k] = healthy_ref[k]
+        pred = max(0.0, min(100.0, float(model.predict(as_row(alt))[0])))
+        gains.append(pred - ml_pred)
+
+    max_gain = max(gains)
+    # Both scores in “healthy” band → no degradation headline
+    if rule_health >= 90 and ml_pred >= 90:
+        return None
+    if max_gain < MIN_GAIN:
+        return None
+    return names[gains.index(max_gain)]
+
+
 def section_label(text):
-    """Slim uppercase section divider label."""
     st.markdown(f"""
     <div style='font-family:Inter,sans-serif;font-size:0.68rem;font-weight:600;
                 color:#4a6080;letter-spacing:0.18em;text-transform:uppercase;
@@ -127,11 +203,47 @@ def section_label(text):
     """, unsafe_allow_html=True)
 
 
+def failure_prediction_html(history_df: pd.DataFrame) -> str:
+    """Trend from last 5–7 Health scores: high risk if declining or recent avg < 60."""
+    if history_df.empty or len(history_df) < 5:
+        return """
+        <div style='background:#0d1422;border:1px solid #1a2235;border-radius:8px;
+                    padding:0.55rem 1rem;margin:0.75rem 0 1rem;
+                    font-family:Inter,sans-serif;font-size:0.82rem;color:#4a6080;'>
+            📊 Collecting readings — failure prediction needs at least 5 cycles.
+        </div>
+        """
+    h = history_df["Health"].astype(float).tail(7)
+    avg = float(h.mean())
+    diffs = h.diff().dropna()
+    avg_diff = float(diffs.mean()) if len(diffs) else 0.0
+    declining = avg_diff < 0
+    high_risk = avg < 60 or declining
+    if high_risk:
+        return """
+        <div style='background:linear-gradient(90deg,#1a1400,#120e00);
+                    border:1px solid #eab308;border-left:4px solid #eab308;border-radius:8px;
+                    padding:0.65rem 1.1rem;margin:0.75rem 0 1rem;
+                    font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;
+                    color:#eab308;'>
+            ⚠️ High risk of failure soon
+        </div>
+        """
+    return """
+    <div style='background:linear-gradient(90deg,#071a10,#050f0a);
+                border:1px solid #1a3a25;border-left:4px solid #22c55e;border-radius:8px;
+                padding:0.65rem 1.1rem;margin:0.75rem 0 1rem;
+                font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;
+                color:#4db870;'>
+        ✅ System stable
+    </div>
+    """
+
+
 # ================================================================
 #  SIDEBAR
 # ================================================================
 with st.sidebar:
-    # Logo / title
     st.markdown("""
     <div style='padding:1rem 0 1.2rem;border-bottom:1px solid #1a2235;margin-bottom:1rem;'>
         <div style='font-family:Orbitron,monospace;font-size:0.7rem;font-weight:700;
@@ -141,20 +253,16 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Threshold cards
     def threshold_card(label, value, unit, color, icon):
         st.markdown(f"""
         <div style='background:linear-gradient(135deg,#0d1422 0%,#0b1018 100%);
                     border:1px solid #1a2235;border-left:3px solid {color};
-                    border-radius:8px;padding:0.6rem 0.9rem;margin-bottom:0.5rem;
-                    transition:all 0.2s;'>
+                    border-radius:8px;padding:0.6rem 0.9rem;margin-bottom:0.5rem;'>
             <div style='font-family:Inter,sans-serif;font-size:0.65rem;font-weight:500;
                         color:#4a6080;letter-spacing:0.1em;text-transform:uppercase;
                         margin-bottom:0.25rem;'>{icon} &nbsp;{label}</div>
-            <div style='font-family:Inter,sans-serif;font-size:1rem;font-weight:700;
-                        color:#cdd6e0;'>
-                {value}<span style='font-size:0.72rem;font-weight:400;color:#4a6080;
-                margin-left:3px;'>{unit}</span>
+            <div style='font-family:Inter,sans-serif;font-size:1rem;font-weight:700;color:#cdd6e0;'>
+                {value}<span style='font-size:0.72rem;font-weight:400;color:#4a6080;margin-left:3px;'>{unit}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -194,7 +302,7 @@ with st.sidebar:
         <span style='color:#607080;'>History Window</span> &nbsp;
         <span style='color:#8a9ab0;font-weight:600;'>{HISTORY_SIZE} pts</span><br>
         <span style='color:#607080;'>Version</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <span style='color:#8a9ab0;font-weight:600;'>v2.2</span>
+        <span style='color:#8a9ab0;font-weight:600;'>v2.3</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -228,7 +336,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ================================================================
-#  CONTROL ROW  –  button + live status pill
+#  CONTROL ROW
 # ================================================================
 col_btn, col_status = st.columns([2, 5])
 
@@ -237,12 +345,10 @@ with col_btn:
         if st.button("🔄  Reset & Restart"):
             st.session_state.shutdown = False
             st.session_state.running  = True
-            st.rerun()
     else:
         label = "⏹  Stop Monitoring" if st.session_state.running else "▶  Start Monitoring"
         if st.button(label):
             st.session_state.running = not st.session_state.running
-            st.rerun()
 
 with col_status:
     if st.session_state.running:
@@ -319,9 +425,12 @@ if st.session_state.running:
         "Sound":       data["sound"],
         "Health":      score,
     }])
-    st.session_state.history = pd.concat(
-        [st.session_state.history, new_row], ignore_index=True
-    ).tail(HISTORY_SIZE)
+    if st.session_state.history.empty:
+        st.session_state.history = new_row
+    else:
+        st.session_state.history = pd.concat(
+            [st.session_state.history, new_row], ignore_index=True
+        ).tail(HISTORY_SIZE)
 
 # ================================================================
 #  UI RENDER
@@ -335,16 +444,16 @@ if snap is not None:
     status      = snap["status"]
     suggestions = snap["suggestions"]
 
-    # colour palette per status
+    # ── STATUS STYLES ───────────────────────────────────────
     STATUS_STYLES = {
         "Healthy":  {"color": "#22c55e", "glow": "rgba(34,197,94,0.18)",  "bg": "#071a10", "icon": "✦"},
         "Warning":  {"color": "#eab308", "glow": "rgba(234,179,8,0.18)",  "bg": "#1a1400", "icon": "▲"},
-        "Critical": {"color": "#ef4444", "glow": "rgba(239,68,68,0.18)", "bg": "#1a0505", "icon": "✖"},
+        "Critical": {"color": "#ef4444", "glow": "rgba(239,68,68,0.18)",  "bg": "#1a0505", "icon": "✖"},
     }
     S = STATUS_STYLES.get(status, STATUS_STYLES["Critical"])
 
     # ── HEALTH SCORE BANNER ─────────────────────────────────
-    bar_pct  = max(0, min(100, score))
+    bar_pct   = max(0, min(100, score))
     bar_color = S["color"]
 
     st.markdown(f"""
@@ -352,8 +461,7 @@ if snap is not None:
                 border:1px solid {S["color"]}40;border-left:5px solid {S["color"]};
                 border-radius:10px;padding:1.2rem 1.8rem;margin-bottom:1.3rem;
                 box-shadow:0 0 30px {S["glow"]},0 4px 16px rgba(0,0,0,0.5);'>
-        <div style='display:flex;align-items:center;justify-content:space-between;
-                    margin-bottom:0.9rem;'>
+        <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:0.9rem;'>
             <div>
                 <div style='font-family:Inter,sans-serif;font-size:0.68rem;font-weight:600;
                             color:{S["color"]}99;letter-spacing:0.18em;text-transform:uppercase;
@@ -375,36 +483,81 @@ if snap is not None:
                             color:#4a6080;margin-top:0.1rem;'>out of 100</div>
             </div>
         </div>
-        <!-- Health score progress bar -->
-        <div style='background:#0d1422;border-radius:4px;height:6px;overflow:hidden;
-                    border:1px solid #1a2235;'>
+        <div style='background:#0d1422;border-radius:4px;height:6px;overflow:hidden;border:1px solid #1a2235;'>
             <div style='height:100%;width:{bar_pct}%;
                         background:linear-gradient(90deg,{bar_color}80,{bar_color});
                         border-radius:4px;transition:width 0.5s ease;
                         box-shadow:0 0 8px {bar_color}80;'></div>
         </div>
         <div style='display:flex;justify-content:space-between;
-                    font-family:Inter,sans-serif;font-size:0.6rem;color:#2a3a55;
-                    margin-top:0.25rem;'>
+                    font-family:Inter,sans-serif;font-size:0.6rem;color:#2a3a55;margin-top:0.25rem;'>
             <span>0 — SHUTDOWN</span><span>50 — WARNING</span><span>90 — HEALTHY — 100</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
+    st.markdown(failure_prediction_html(st.session_state.history), unsafe_allow_html=True)
 
-    # ── SENSOR CARDS ────────────────────────────────────────
+else:
+    # ── IDLE STATE ───────────────────────────────────────────
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#0d1422,#090d16);
+                border:1px dashed #1a2235;border-radius:10px;
+                padding:3.5rem;text-align:center;margin:0.5rem 0 1.5rem;'>
+        <div style='font-size:2.5rem;margin-bottom:0.8rem;opacity:0.2;'>⚙</div>
+        <div style='font-family:Orbitron,monospace;font-size:0.8rem;font-weight:600;
+                    color:#2a3a55;letter-spacing:0.18em;margin-bottom:0.4rem;'>
+            AWAITING SENSOR DATA
+        </div>
+        <div style='font-family:Inter,sans-serif;font-size:0.78rem;color:#2a3a55;'>
+            Press <strong style="color:#4a6080;">▶ Start Monitoring</strong> to begin
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ================================================================
+#  CHARTS
+# ================================================================
+st.markdown("<hr>", unsafe_allow_html=True)
+section_label("System Trends")
+
+df = st.session_state.history
+
+if not df.empty:
+    chart_df = df.set_index("Cycle")
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Health Score", "Vibration", "Temperature", "Pressure", "Sound"
+    ])
+    with tab1: st.line_chart(chart_df[["Health"]],      height=180, width="stretch")
+    with tab2: st.line_chart(chart_df[["Vibration"]],   height=180, width="stretch")
+    with tab3: st.line_chart(chart_df[["Temperature"]], height=180, width="stretch")
+    with tab4: st.line_chart(chart_df[["Pressure"]],    height=180, width="stretch")
+    with tab5: st.line_chart(chart_df[["Sound"]],       height=180, width="stretch")
+else:
+    st.markdown("""
+    <div style='background:#0d1422;border:1px dashed #1a2235;border-radius:8px;
+                padding:1.2rem;text-align:center;font-family:Inter,sans-serif;
+                font-size:0.78rem;color:#2a3a55;letter-spacing:0.06em;'>
+        Trend data will appear after the first reading
+    </div>
+    """, unsafe_allow_html=True)
+
+# ================================================================
+#  LIVE SENSOR READINGS
+# ================================================================
+if snap is not None:
     section_label("Live Sensor Readings")
 
     sensors = [
-        ("Vibration",   data["vibration"],   anomalies["vibration"],   "mm/s", "#3b82f6", "〰", VIBRATION_THRESHOLD),
-        ("Temperature", data["temperature"], anomalies["temperature"], "°C",   "#ef4444", "🌡", TEMPERATURE_THRESHOLD),
-        ("Pressure",    data["pressure"],    anomalies["pressure"],    "bar",  "#f97316", "⬆", PRESSURE_THRESHOLD),
-        ("Sound",       data["sound"],       anomalies["sound"],       "dB",   "#a855f7", "◉", SOUND_THRESHOLD),
+        ("Vibration",   data["vibration"],   anomalies["vibration"],   "mm/s", "#3b82f6", "V", VIBRATION_THRESHOLD),
+        ("Temperature", data["temperature"], anomalies["temperature"], "°C",   "#ef4444", "T", TEMPERATURE_THRESHOLD),
+        ("Pressure",    data["pressure"],    anomalies["pressure"],    "bar",  "#f97316", "P", PRESSURE_THRESHOLD),
+        ("Sound",       data["sound"],       anomalies["sound"],       "dB",   "#a855f7", "S", SOUND_THRESHOLD),
     ]
 
     cols = st.columns(4)
     for col, (name, val, is_anomaly, unit, accent, icon, thresh) in zip(cols, sensors):
         border_col = "#ef4444" if is_anomaly else accent
-        glow_col   = "rgba(239,68,68,0.18)" if is_anomaly else f"rgba(0,0,0,0.1)"
+        glow_col   = "rgba(239,68,68,0.18)" if is_anomaly else "rgba(0,0,0,0.1)"
         tag_color  = "#ef4444" if is_anomaly else "#22c55e"
         tag_bg     = "#1a0505" if is_anomaly else "#071a10"
         tag_text   = "⚠ OVER LIMIT" if is_anomaly else "✔ NORMAL"
@@ -414,10 +567,8 @@ if snap is not None:
         <div style='background:linear-gradient(160deg,#0d1422 0%,#090d16 100%);
                     border:1px solid #1a2235;border-top:3px solid {border_col};
                     border-radius:10px;padding:1.1rem 1.2rem 1rem;
-                    box-shadow:0 0 20px {glow_col},0 4px 12px rgba(0,0,0,0.4);
-                    transition:all 0.3s;'>
-            <div style='display:flex;align-items:center;justify-content:space-between;
-                        margin-bottom:0.55rem;'>
+                    box-shadow:0 0 20px {glow_col},0 4px 12px rgba(0,0,0,0.4);'>
+            <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:0.55rem;'>
                 <div style='font-family:Inter,sans-serif;font-size:0.68rem;font-weight:600;
                             color:#4a6080;letter-spacing:0.12em;text-transform:uppercase;'>{icon} {name}</div>
                 <div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;
@@ -430,14 +581,16 @@ if snap is not None:
                         {"text-shadow:0 0 16px #ef444480;" if is_anomaly else ""}'>
                 {val}
             </div>
-            <div style='font-family:Inter,sans-serif;font-size:0.72rem;color:#4a6080;
-                        margin-top:0.25rem;'>{unit}
-                <span style='color:#2a3a55;margin-left:0.4rem;'>· limit {thresh}</span>
+            <div style='font-family:Inter,sans-serif;font-size:0.72rem;color:#4a6080;margin-top:0.25rem;'>
+                {unit}<span style='color:#2a3a55;margin-left:0.4rem;'>· limit {thresh}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # ── MAINTENANCE SUGGESTIONS ─────────────────────────────
+# ================================================================
+#  MAINTENANCE SUGGESTIONS
+# ================================================================
+if snap is not None:
     st.markdown("<br>", unsafe_allow_html=True)
     section_label("Maintenance Suggestions")
 
@@ -467,52 +620,21 @@ if snap is not None:
         </div>
         """, unsafe_allow_html=True)
 
-else:
-    # ── IDLE STATE ───────────────────────────────────────────
-    st.markdown("""
-    <div style='background:linear-gradient(135deg,#0d1422,#090d16);
-                border:1px dashed #1a2235;border-radius:10px;
-                padding:3.5rem;text-align:center;margin:0.5rem 0 1.5rem;'>
-        <div style='font-size:2.5rem;margin-bottom:0.8rem;opacity:0.2;'>⚙</div>
-        <div style='font-family:Orbitron,monospace;font-size:0.8rem;font-weight:600;
-                    color:#2a3a55;letter-spacing:0.18em;margin-bottom:0.4rem;'>
-            AWAITING SENSOR DATA
-        </div>
-        <div style='font-family:Inter,sans-serif;font-size:0.78rem;color:#2a3a55;'>
-            Press <strong style="color:#4a6080;">▶ Start Monitoring</strong> to begin
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ================================================================
-#  CHARTS
-# ================================================================
-st.markdown("<hr>", unsafe_allow_html=True)
-section_label("System Trends")
-
-if st.session_state.chart_placeholder is None:
-    st.session_state.chart_placeholder = st.empty()
-
-chart_area = st.session_state.chart_placeholder
-df = st.session_state.history
-
-with chart_area.container():
-    if not df.empty:
-        chart_df = df.set_index("Cycle")
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "Health Score", "Vibration", "Temperature", "Pressure", "Sound"
-        ])
-        with tab1: st.line_chart(chart_df[["Health"]],      height=230, use_container_width=True)
-        with tab2: st.line_chart(chart_df[["Vibration"]],   height=230, use_container_width=True)
-        with tab3: st.line_chart(chart_df[["Temperature"]], height=230, use_container_width=True)
-        with tab4: st.line_chart(chart_df[["Pressure"]],    height=230, use_container_width=True)
-        with tab5: st.line_chart(chart_df[["Sound"]],       height=230, use_container_width=True)
-    else:
+    top_sensor = ml_insight_top_sensor_live(st.session_state.ml_model, data, score)
+    if top_sensor is None:
         st.markdown("""
-        <div style='background:#0d1422;border:1px dashed #1a2235;border-radius:8px;
-                    padding:2rem;text-align:center;font-family:Inter,sans-serif;
-                    font-size:0.78rem;color:#2a3a55;letter-spacing:0.06em;'>
-            Trend data will appear after the first reading
+        <div style='background:#0b1420;border:1px solid #1a3a35;border-left:4px solid #22c55e;
+                    border-radius:8px;padding:0.75rem 1.1rem;margin-top:0.75rem;
+                    font-family:Inter,sans-serif;font-size:0.88rem;color:#6eb889;line-height:1.5;'>
+            📊 AI Based Insights: <strong style="color:#4db870;">No dominant degradation signal</strong> — readings match healthy operation
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style='background:#0b1420;border:1px solid #1e3a5a;border-left:4px solid #4d9fff;
+                    border-radius:8px;padding:0.75rem 1.1rem;margin-top:0.75rem;
+                    font-family:Inter,sans-serif;font-size:0.88rem;color:#8ab4e8;line-height:1.5;'>
+            📊 AI Based Insights: <strong style="color:#7dc4ff;">{top_sensor}</strong> contributing most to degradation
         </div>
         """, unsafe_allow_html=True)
 
@@ -544,6 +666,15 @@ if st.session_state.shutdown:
     </div>
     """, unsafe_allow_html=True)
 
+# ================================================================
+#  AUTO-REFRESH
+#  Frontend timer-based refresh prevents white-screen blocking.
+# ================================================================
 elif st.session_state.running:
-    time.sleep(UPDATE_INTERVAL_SEC)
-    st.rerun()
+    st.markdown(
+        f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;"
+        f"color:#2a3a55;text-align:right;padding-right:0.5rem;'>"
+        f"Refreshing every {UPDATE_INTERVAL_SEC}s...</div>",
+        unsafe_allow_html=True,
+    )
+    st_autorefresh(interval=UPDATE_INTERVAL_SEC * 1000, key="monitor_refresh")

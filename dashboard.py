@@ -1,7 +1,6 @@
 import time
 import pandas as pd
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 
 from ml_model import load_model
 from cnc_health_monitor import (
@@ -48,36 +47,6 @@ html, body, .stApp {
 }
 [data-testid="stSidebar"] * { font-family: 'Inter', sans-serif; }
 
-/* Keep Streamlit/Material icon ligatures from being shown as text (e.g. keyboard_double_*) */
-span.material-symbols-rounded,
-span.material-symbols-outlined,
-span.material-symbols-sharp,
-span.material-icons,
-span.material-icons-round,
-span.material-icons-outlined,
-span.material-icons-sharp,
-i.material-icons,
-i.material-icons-round,
-i.material-icons-outlined,
-i.material-icons-sharp,
-[class*="material-symbols"],
-[class*="material-icons"],
-[data-baseweb="icon"] span {
-    font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
-    font-weight: normal !important;
-    font-style: normal !important;
-    letter-spacing: normal !important;
-    text-transform: none !important;
-}
-
-/* Hide sidebar control ligature text like "keyboard_double_*" while preserving button behavior */
-[data-testid="stSidebarCollapseButton"] span[class*="material"],
-[data-testid="stSidebarCollapsedControl"] span[class*="material"],
-[data-testid="stSidebarResizer"] span[class*="material"] {
-    display: none !important;
-}
-
-/* Final fallback: hide Streamlit sidebar collapse controls entirely */
 [data-testid="stSidebarCollapseButton"],
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="collapsedControl"] {
@@ -134,39 +103,32 @@ hr { border-color: #1a2235 !important; margin: 1.2rem 0 !important; }
 # ================================================================
 #  SESSION STATE
 # ================================================================
-if "running"           not in st.session_state: st.session_state.running           = False
-if "cycle"             not in st.session_state: st.session_state.cycle             = 0
-if "history"           not in st.session_state: st.session_state.history           = pd.DataFrame(columns=["Cycle","Vibration","Temperature","Pressure","Sound","Health"])
-if "latest"            not in st.session_state: st.session_state.latest            = None
-if "shutdown"          not in st.session_state: st.session_state.shutdown          = False
+if "running"  not in st.session_state: st.session_state.running  = False
+if "cycle"    not in st.session_state: st.session_state.cycle    = 0
+if "history"  not in st.session_state: st.session_state.history  = pd.DataFrame(columns=["Cycle","Vibration","Temperature","Pressure","Sound","Health"])
+if "latest"   not in st.session_state: st.session_state.latest   = None
+if "shutdown" not in st.session_state: st.session_state.shutdown = False
 
 if "ml_model" not in st.session_state:
     with st.spinner("⚙ Training ML model on startup…"):
         st.session_state.ml_model = load_model()
 
 # ================================================================
-#  STYLE HELPERS
+#  HELPERS
 # ================================================================
-def ml_insight_top_sensor_live(model, data: dict, rule_health: float) -> str | None:
-    """
-    Counterfactual RF insight: which sensor most pulls ML health down vs nominal.
-    Returns None when rule + ML agree things are healthy or the effect is too small
-    (avoids bogus “degradation” at health 100).
-    """
-    names = ["Vibration", "Temperature", "Pressure", "Sound"]
-    keys = ["vibration", "temperature", "pressure", "sound"]
-    healthy_ref = {
-        "vibration": 2.5,
-        "temperature": 50.0,
-        "pressure": 17.5,
-        "sound": 60.0,
-    }
-    MIN_GAIN = 2.0  # points of predicted health; must clear this to name a stressor
+def ml_insight_top_sensor_live(model, data: dict, rule_health: float):
+    keys      = ["vibration", "temperature", "pressure", "sound"]
+    names     = ["Vibration", "Temperature", "Pressure", "Sound"]
+    healthy_ref = {"vibration": 2.5, "temperature": 50.0, "pressure": 17.5, "sound": 60.0}
+    MIN_GAIN  = 2.0
 
     def as_row(d):
         return [[d["vibration"], d["temperature"], d["pressure"], d["sound"]]]
 
     ml_pred = max(0.0, min(100.0, float(model.predict(as_row(data))[0])))
+    if rule_health >= 90 and ml_pred >= 90:
+        return None
+
     gains = []
     for k in keys:
         alt = dict(data)
@@ -175,9 +137,6 @@ def ml_insight_top_sensor_live(model, data: dict, rule_health: float) -> str | N
         gains.append(pred - ml_pred)
 
     max_gain = max(gains)
-    # Both scores in “healthy” band → no degradation headline
-    if rule_health >= 90 and ml_pred >= 90:
-        return None
     if max_gain < MIN_GAIN:
         return None
     return names[gains.index(max_gain)]
@@ -193,7 +152,6 @@ def section_label(text):
 
 
 def failure_prediction_html(history_df: pd.DataFrame) -> str:
-    """Trend from last 5–7 Health scores: high risk if declining or recent avg < 60."""
     if history_df.empty or len(history_df) < 5:
         return """
         <div style='background:#0d1422;border:1px solid #1a2235;border-radius:8px;
@@ -202,19 +160,15 @@ def failure_prediction_html(history_df: pd.DataFrame) -> str:
             📊 Collecting readings — failure prediction needs at least 5 cycles.
         </div>
         """
-    h = history_df["Health"].astype(float).tail(7)
-    avg = float(h.mean())
-    diffs = h.diff().dropna()
-    avg_diff = float(diffs.mean()) if len(diffs) else 0.0
-    declining = avg_diff < 0
-    high_risk = avg < 60 or declining
-    if high_risk:
+    h        = history_df["Health"].astype(float).tail(7)
+    avg      = float(h.mean())
+    avg_diff = float(h.diff().dropna().mean())
+    if avg < 60 or avg_diff < 0:
         return """
         <div style='background:linear-gradient(90deg,#1a1400,#120e00);
                     border:1px solid #eab308;border-left:4px solid #eab308;border-radius:8px;
                     padding:0.65rem 1.1rem;margin:0.75rem 0 1rem;
-                    font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;
-                    color:#eab308;'>
+                    font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;color:#eab308;'>
             ⚠️ High risk of failure soon
         </div>
         """
@@ -222,12 +176,10 @@ def failure_prediction_html(history_df: pd.DataFrame) -> str:
     <div style='background:linear-gradient(90deg,#071a10,#050f0a);
                 border:1px solid #1a3a25;border-left:4px solid #22c55e;border-radius:8px;
                 padding:0.65rem 1.1rem;margin:0.75rem 0 1rem;
-                font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;
-                color:#4db870;'>
+                font-family:Inter,sans-serif;font-size:0.88rem;font-weight:600;color:#4db870;'>
         ✅ System stable
     </div>
     """
-
 
 # ================================================================
 #  SIDEBAR
@@ -291,7 +243,7 @@ with st.sidebar:
         <span style='color:#607080;'>History Window</span> &nbsp;
         <span style='color:#8a9ab0;font-weight:600;'>{HISTORY_SIZE} pts</span><br>
         <span style='color:#607080;'>Version</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <span style='color:#8a9ab0;font-weight:600;'>v2.3</span>
+        <span style='color:#8a9ab0;font-weight:600;'>v2.4</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -334,10 +286,12 @@ with col_btn:
         if st.button("🔄  Reset & Restart"):
             st.session_state.shutdown = False
             st.session_state.running  = True
+            st.rerun()
     else:
         label = "⏹  Stop Monitoring" if st.session_state.running else "▶  Start Monitoring"
         if st.button(label):
             st.session_state.running = not st.session_state.running
+            st.rerun()
 
 with col_status:
     if st.session_state.running:
@@ -433,18 +387,16 @@ if snap is not None:
     status      = snap["status"]
     suggestions = snap["suggestions"]
 
-    # ── STATUS STYLES ───────────────────────────────────────
     STATUS_STYLES = {
         "Healthy":  {"color": "#22c55e", "glow": "rgba(34,197,94,0.18)",  "bg": "#071a10", "icon": "✦"},
         "Warning":  {"color": "#eab308", "glow": "rgba(234,179,8,0.18)",  "bg": "#1a1400", "icon": "▲"},
         "Critical": {"color": "#ef4444", "glow": "rgba(239,68,68,0.18)",  "bg": "#1a0505", "icon": "✖"},
     }
-    S = STATUS_STYLES.get(status, STATUS_STYLES["Critical"])
-
-    # ── HEALTH SCORE BANNER ─────────────────────────────────
+    S         = STATUS_STYLES.get(status, STATUS_STYLES["Critical"])
     bar_pct   = max(0, min(100, score))
     bar_color = S["color"]
 
+    # ── HEALTH SCORE BANNER ─────────────────────────────────
     st.markdown(f"""
     <div style='background:linear-gradient(135deg,{S["bg"]} 0%,#0b0f18 100%);
                 border:1px solid {S["color"]}40;border-left:5px solid {S["color"]};
@@ -484,10 +436,10 @@ if snap is not None:
         </div>
     </div>
     """, unsafe_allow_html=True)
+
     st.markdown(failure_prediction_html(st.session_state.history), unsafe_allow_html=True)
 
 else:
-    # ── IDLE STATE ───────────────────────────────────────────
     st.markdown("""
     <div style='background:linear-gradient(135deg,#0d1422,#090d16);
                 border:1px dashed #1a2235;border-radius:10px;
@@ -516,11 +468,11 @@ if not df.empty:
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Health Score", "Vibration", "Temperature", "Pressure", "Sound"
     ])
-    with tab1: st.line_chart(chart_df[["Health"]],      height=180, width="stretch")
-    with tab2: st.line_chart(chart_df[["Vibration"]],   height=180, width="stretch")
-    with tab3: st.line_chart(chart_df[["Temperature"]], height=180, width="stretch")
-    with tab4: st.line_chart(chart_df[["Pressure"]],    height=180, width="stretch")
-    with tab5: st.line_chart(chart_df[["Sound"]],       height=180, width="stretch")
+    with tab1: st.line_chart(chart_df[["Health"]],      height=180, use_container_width=True)
+    with tab2: st.line_chart(chart_df[["Vibration"]],   height=180, use_container_width=True)
+    with tab3: st.line_chart(chart_df[["Temperature"]], height=180, use_container_width=True)
+    with tab4: st.line_chart(chart_df[["Pressure"]],    height=180, use_container_width=True)
+    with tab5: st.line_chart(chart_df[["Sound"]],       height=180, use_container_width=True)
 else:
     st.markdown("""
     <div style='background:#0d1422;border:1px dashed #1a2235;border-radius:8px;
@@ -577,7 +529,7 @@ if snap is not None:
         """, unsafe_allow_html=True)
 
 # ================================================================
-#  MAINTENANCE SUGGESTIONS
+#  MAINTENANCE SUGGESTIONS + AI INSIGHT
 # ================================================================
 if snap is not None:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -656,14 +608,20 @@ if st.session_state.shutdown:
     """, unsafe_allow_html=True)
 
 # ================================================================
-#  AUTO-REFRESH
-#  Frontend timer-based refresh prevents white-screen blocking.
+#  AUTO-REFRESH  —  WHITE SCREEN FIX
+#  The full page renders first. Then we count down second-by-second
+#  in a small placeholder and only call st.rerun() at the very end.
+#  No external library (streamlit-autorefresh) required.
 # ================================================================
 elif st.session_state.running:
-    st.markdown(
-        f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;"
-        f"color:#2a3a55;text-align:right;padding-right:0.5rem;'>"
-        f"Refreshing every {UPDATE_INTERVAL_SEC}s...</div>",
-        unsafe_allow_html=True,
-    )
-    st_autorefresh(interval=UPDATE_INTERVAL_SEC * 1000, key="monitor_refresh")
+    countdown = st.empty()
+    for remaining in range(UPDATE_INTERVAL_SEC, 0, -1):
+        countdown.markdown(
+            f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;"
+            f"color:#2a3a55;text-align:right;padding-right:0.5rem;'>"
+            f"Next update in {remaining}s…</div>",
+            unsafe_allow_html=True,
+        )
+        time.sleep(1)
+    countdown.empty()
+    st.rerun()

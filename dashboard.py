@@ -40,59 +40,36 @@ html, body, .stApp {
     font-family: 'Inter', sans-serif;
     font-size: 15px;
 }
-
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #0b0f18 0%, #080c12 100%) !important;
     border-right: 1px solid #1a2235;
 }
 [data-testid="stSidebar"] * { font-family: 'Inter', sans-serif; }
-
 [data-testid="stSidebarCollapseButton"],
 [data-testid="stSidebarCollapsedControl"],
-[data-testid="collapsedControl"] {
-    display: none !important;
-}
-
+[data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stTabs"] { border-bottom: 1px solid #1a2235; }
 [data-testid="stTabs"] button {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    color: #607080;
-    padding: 0.5rem 1rem;
-    transition: color 0.2s;
+    font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 500;
+    letter-spacing: 0.04em; color: #607080; padding: 0.5rem 1rem; transition: color 0.2s;
 }
-[data-testid="stTabs"] button:hover  { color: #a0b4c8; }
+[data-testid="stTabs"] button:hover { color: #a0b4c8; }
 [data-testid="stTabs"] button[aria-selected="true"] {
-    color: #4d9fff;
-    font-weight: 600;
-    border-bottom: 2px solid #4d9fff !important;
+    color: #4d9fff; font-weight: 600; border-bottom: 2px solid #4d9fff !important;
 }
-
 .stButton > button {
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 0.85rem;
-    letter-spacing: 0.04em;
-    border-radius: 8px;
-    border: 1px solid #1e2d40;
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 0.85rem;
+    letter-spacing: 0.04em; border-radius: 8px; border: 1px solid #1e2d40;
     background: linear-gradient(135deg, #111827 0%, #0f1720 100%);
-    color: #cdd6e0;
-    padding: 0.55rem 1.5rem;
-    transition: all 0.25s ease;
+    color: #cdd6e0; padding: 0.55rem 1.5rem; transition: all 0.25s ease;
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 .stButton > button:hover {
     background: linear-gradient(135deg, #162032 0%, #0f2030 100%);
-    border-color: #4d9fff;
-    color: #7dc4ff;
-    box-shadow: 0 0 16px rgba(77,159,255,0.2);
-    transform: translateY(-1px);
+    border-color: #4d9fff; color: #7dc4ff;
+    box-shadow: 0 0 16px rgba(77,159,255,0.2); transform: translateY(-1px);
 }
-
 hr { border-color: #1a2235 !important; margin: 1.2rem 0 !important; }
-
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: #080c12; }
 ::-webkit-scrollbar-thumb { background: #1a2235; border-radius: 3px; }
@@ -117,10 +94,10 @@ if "ml_model" not in st.session_state:
 #  HELPERS
 # ================================================================
 def ml_insight_top_sensor_live(model, data: dict, rule_health: float):
-    keys      = ["vibration", "temperature", "pressure", "sound"]
-    names     = ["Vibration", "Temperature", "Pressure", "Sound"]
+    keys        = ["vibration", "temperature", "pressure", "sound"]
+    names       = ["Vibration", "Temperature", "Pressure", "Sound"]
     healthy_ref = {"vibration": 2.5, "temperature": 50.0, "pressure": 17.5, "sound": 60.0}
-    MIN_GAIN  = 2.0
+    MIN_GAIN    = 2.0
 
     def as_row(d):
         return [[d["vibration"], d["temperature"], d["pressure"], d["sound"]]]
@@ -216,7 +193,6 @@ with st.sidebar:
 
     st.markdown("<hr>", unsafe_allow_html=True)
     section_label("Score Legend")
-
     for color, glow, rng, label in [
         ("#22c55e", "rgba(34,197,94,0.15)",  "90 – 100", "HEALTHY"),
         ("#eab308", "rgba(234,179,8,0.15)",  "50 – 89",  "WARNING"),
@@ -224,11 +200,10 @@ with st.sidebar:
         ("#dc2626", "rgba(220,38,38,0.1)",   "< 10",     "AUTO SHUTDOWN"),
     ]:
         st.markdown(f"""
-        <div style='display:flex;align-items:center;gap:0.6rem;
-                    margin-bottom:0.4rem;padding:0.3rem 0.5rem;
-                    border-radius:5px;background:{glow};'>
-            <div style='width:8px;height:8px;border-radius:50%;
-                        background:{color};box-shadow:0 0 6px {color};flex-shrink:0;'></div>
+        <div style='display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem;
+                    padding:0.3rem 0.5rem;border-radius:5px;background:{glow};'>
+            <div style='width:8px;height:8px;border-radius:50%;background:{color};
+                        box-shadow:0 0 6px {color};flex-shrink:0;'></div>
             <span style='font-family:Inter,sans-serif;font-size:0.78rem;color:#8a9ab0;'>
                 {rng} &nbsp;<span style='color:{color};font-weight:600;'>{label}</span>
             </span>
@@ -258,8 +233,7 @@ st.markdown("""
     <div style='display:flex;align-items:center;justify-content:space-between;'>
         <div>
             <div style='font-family:Inter,sans-serif;font-size:0.68rem;font-weight:600;
-                        color:#4d9fff;letter-spacing:0.22em;text-transform:uppercase;
-                        margin-bottom:0.35rem;'>
+                        color:#4d9fff;letter-spacing:0.22em;text-transform:uppercase;margin-bottom:0.35rem;'>
                 Edge-Based Predictive Maintenance System
             </div>
             <div style='font-family:Orbitron,monospace;font-size:1.65rem;font-weight:700;
@@ -296,10 +270,9 @@ with col_btn:
 with col_status:
     if st.session_state.running:
         st.markdown(f"""
-        <div style='background:linear-gradient(90deg,#0b2218,#091a12);
-                    border:1px solid #22c55e;border-radius:8px;
-                    padding:0.58rem 1.1rem;display:inline-flex;align-items:center;gap:0.7rem;
-                    box-shadow:0 0 20px rgba(34,197,94,0.12);'>
+        <div style='background:linear-gradient(90deg,#0b2218,#091a12);border:1px solid #22c55e;
+                    border-radius:8px;padding:0.58rem 1.1rem;display:inline-flex;
+                    align-items:center;gap:0.7rem;box-shadow:0 0 20px rgba(34,197,94,0.12);'>
             <div style='width:8px;height:8px;border-radius:50%;background:#22c55e;
                         box-shadow:0 0 8px #22c55e;animation:pulse 1.5s infinite;'></div>
             <span style='font-family:Inter,sans-serif;font-size:0.82rem;font-weight:600;
@@ -315,10 +288,9 @@ with col_status:
         """, unsafe_allow_html=True)
     elif st.session_state.shutdown:
         st.markdown("""
-        <div style='background:linear-gradient(90deg,#1a0808,#120505);
-                    border:1px solid #ef4444;border-radius:8px;
-                    padding:0.58rem 1.1rem;display:inline-flex;align-items:center;gap:0.7rem;
-                    box-shadow:0 0 20px rgba(239,68,68,0.15);'>
+        <div style='background:linear-gradient(90deg,#1a0808,#120505);border:1px solid #ef4444;
+                    border-radius:8px;padding:0.58rem 1.1rem;display:inline-flex;
+                    align-items:center;gap:0.7rem;box-shadow:0 0 20px rgba(239,68,68,0.15);'>
             <span style='font-size:1rem;'>⛔</span>
             <span style='font-family:Inter,sans-serif;font-size:0.82rem;font-weight:600;
                          color:#ef4444;letter-spacing:0.06em;'>SHUTDOWN ACTIVE</span>
@@ -344,7 +316,6 @@ st.markdown("<hr>", unsafe_allow_html=True)
 # ================================================================
 if st.session_state.running:
     st.session_state.cycle += 1
-
     data          = generate_sensor_data()
     anomalies     = detect_anomalies(data)
     score, status = calculate_health_score(data, anomalies)
@@ -361,12 +332,9 @@ if st.session_state.running:
         st.session_state.shutdown = True
 
     new_row = pd.DataFrame([{
-        "Cycle":       st.session_state.cycle,
-        "Vibration":   data["vibration"],
-        "Temperature": data["temperature"],
-        "Pressure":    data["pressure"],
-        "Sound":       data["sound"],
-        "Health":      score,
+        "Cycle": st.session_state.cycle, "Vibration": data["vibration"],
+        "Temperature": data["temperature"], "Pressure": data["pressure"],
+        "Sound": data["sound"], "Health": score,
     }])
     if st.session_state.history.empty:
         st.session_state.history = new_row
@@ -396,7 +364,6 @@ if snap is not None:
     bar_pct   = max(0, min(100, score))
     bar_color = S["color"]
 
-    # ── HEALTH SCORE BANNER ─────────────────────────────────
     st.markdown(f"""
     <div style='background:linear-gradient(135deg,{S["bg"]} 0%,#0b0f18 100%);
                 border:1px solid {S["color"]}40;border-left:5px solid {S["color"]};
@@ -430,8 +397,8 @@ if snap is not None:
                         border-radius:4px;transition:width 0.5s ease;
                         box-shadow:0 0 8px {bar_color}80;'></div>
         </div>
-        <div style='display:flex;justify-content:space-between;
-                    font-family:Inter,sans-serif;font-size:0.6rem;color:#2a3a55;margin-top:0.25rem;'>
+        <div style='display:flex;justify-content:space-between;font-family:Inter,sans-serif;
+                    font-size:0.6rem;color:#2a3a55;margin-top:0.25rem;'>
             <span>0 — SHUTDOWN</span><span>50 — WARNING</span><span>90 — HEALTHY — 100</span>
         </div>
     </div>
@@ -441,9 +408,8 @@ if snap is not None:
 
 else:
     st.markdown("""
-    <div style='background:linear-gradient(135deg,#0d1422,#090d16);
-                border:1px dashed #1a2235;border-radius:10px;
-                padding:3.5rem;text-align:center;margin:0.5rem 0 1.5rem;'>
+    <div style='background:linear-gradient(135deg,#0d1422,#090d16);border:1px dashed #1a2235;
+                border-radius:10px;padding:3.5rem;text-align:center;margin:0.5rem 0 1.5rem;'>
         <div style='font-size:2.5rem;margin-bottom:0.8rem;opacity:0.2;'>⚙</div>
         <div style='font-family:Orbitron,monospace;font-size:0.8rem;font-weight:600;
                     color:#2a3a55;letter-spacing:0.18em;margin-bottom:0.4rem;'>
@@ -460,14 +426,11 @@ else:
 # ================================================================
 st.markdown("<hr>", unsafe_allow_html=True)
 section_label("System Trends")
-
 df = st.session_state.history
 
 if not df.empty:
     chart_df = df.set_index("Cycle")
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Health Score", "Vibration", "Temperature", "Pressure", "Sound"
-    ])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Health Score","Vibration","Temperature","Pressure","Sound"])
     with tab1: st.line_chart(chart_df[["Health"]],      height=180, use_container_width=True)
     with tab2: st.line_chart(chart_df[["Vibration"]],   height=180, use_container_width=True)
     with tab3: st.line_chart(chart_df[["Temperature"]], height=180, use_container_width=True)
@@ -475,9 +438,9 @@ if not df.empty:
     with tab5: st.line_chart(chart_df[["Sound"]],       height=180, use_container_width=True)
 else:
     st.markdown("""
-    <div style='background:#0d1422;border:1px dashed #1a2235;border-radius:8px;
-                padding:1.2rem;text-align:center;font-family:Inter,sans-serif;
-                font-size:0.78rem;color:#2a3a55;letter-spacing:0.06em;'>
+    <div style='background:#0d1422;border:1px dashed #1a2235;border-radius:8px;padding:1.2rem;
+                text-align:center;font-family:Inter,sans-serif;font-size:0.78rem;
+                color:#2a3a55;letter-spacing:0.06em;'>
         Trend data will appear after the first reading
     </div>
     """, unsafe_allow_html=True)
@@ -487,14 +450,12 @@ else:
 # ================================================================
 if snap is not None:
     section_label("Live Sensor Readings")
-
     sensors = [
         ("Vibration",   data["vibration"],   anomalies["vibration"],   "mm/s", "#3b82f6", "V", VIBRATION_THRESHOLD),
         ("Temperature", data["temperature"], anomalies["temperature"], "°C",   "#ef4444", "T", TEMPERATURE_THRESHOLD),
         ("Pressure",    data["pressure"],    anomalies["pressure"],    "bar",  "#f97316", "P", PRESSURE_THRESHOLD),
         ("Sound",       data["sound"],       anomalies["sound"],       "dB",   "#a855f7", "S", SOUND_THRESHOLD),
     ]
-
     cols = st.columns(4)
     for col, (name, val, is_anomaly, unit, accent, icon, thresh) in zip(cols, sensors):
         border_col = "#ef4444" if is_anomaly else accent
@@ -503,7 +464,6 @@ if snap is not None:
         tag_bg     = "#1a0505" if is_anomaly else "#071a10"
         tag_text   = "⚠ OVER LIMIT" if is_anomaly else "✔ NORMAL"
         val_color  = "#ef4444" if is_anomaly else "#e8f0f8"
-
         col.markdown(f"""
         <div style='background:linear-gradient(160deg,#0d1422 0%,#090d16 100%);
                     border:1px solid #1a2235;border-top:3px solid {border_col};
@@ -512,16 +472,13 @@ if snap is not None:
             <div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:0.55rem;'>
                 <div style='font-family:Inter,sans-serif;font-size:0.68rem;font-weight:600;
                             color:#4a6080;letter-spacing:0.12em;text-transform:uppercase;'>{icon} {name}</div>
-                <div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;
-                            color:{tag_color};background:{tag_bg};
-                            padding:0.15rem 0.5rem;border-radius:20px;
+                <div style='font-family:Inter,sans-serif;font-size:0.6rem;font-weight:600;color:{tag_color};
+                            background:{tag_bg};padding:0.15rem 0.5rem;border-radius:20px;
                             border:1px solid {tag_color}50;letter-spacing:0.06em;'>{tag_text}</div>
             </div>
             <div style='font-family:Orbitron,monospace;font-size:2rem;font-weight:700;
                         color:{val_color};line-height:1;letter-spacing:0.03em;
-                        {"text-shadow:0 0 16px #ef444480;" if is_anomaly else ""}'>
-                {val}
-            </div>
+                        {"text-shadow:0 0 16px #ef444480;" if is_anomaly else ""}'>{val}</div>
             <div style='font-family:Inter,sans-serif;font-size:0.72rem;color:#4a6080;margin-top:0.25rem;'>
                 {unit}<span style='color:#2a3a55;margin-left:0.4rem;'>· limit {thresh}</span>
             </div>
@@ -550,11 +507,9 @@ if snap is not None:
             """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div style='background:linear-gradient(135deg,#071a10,#050f0a);
-                    border:1px solid #1a3a25;border-left:4px solid #22c55e;
-                    border-radius:8px;padding:0.85rem 1.2rem;
-                    box-shadow:0 0 16px rgba(34,197,94,0.08);
-                    display:flex;align-items:center;gap:0.7rem;'>
+        <div style='background:linear-gradient(135deg,#071a10,#050f0a);border:1px solid #1a3a25;
+                    border-left:4px solid #22c55e;border-radius:8px;padding:0.85rem 1.2rem;
+                    box-shadow:0 0 16px rgba(34,197,94,0.08);display:flex;align-items:center;gap:0.7rem;'>
             <span style='font-size:1.1rem;'>✅</span>
             <span style='font-family:Inter,sans-serif;font-size:0.88rem;font-weight:500;
                          color:#4db870;'>All systems nominal — no maintenance action required</span>
@@ -584,17 +539,14 @@ if snap is not None:
 # ================================================================
 if st.session_state.shutdown:
     st.markdown("""
-    <div style='background:linear-gradient(135deg,#1a0505,#0f0303);
-                border:2px solid #ef4444;border-radius:10px;
-                padding:1.5rem 2rem;margin-top:1.4rem;
+    <div style='background:linear-gradient(135deg,#1a0505,#0f0303);border:2px solid #ef4444;
+                border-radius:10px;padding:1.5rem 2rem;margin-top:1.4rem;
                 box-shadow:0 0 40px rgba(239,68,68,0.25),0 4px 20px rgba(0,0,0,0.5);'>
         <div style='display:flex;align-items:center;gap:0.8rem;margin-bottom:0.6rem;'>
             <span style='font-size:1.5rem;'>🚨</span>
             <div style='font-family:Orbitron,monospace;font-size:1.1rem;font-weight:700;
                         color:#ef4444;letter-spacing:0.1em;
-                        text-shadow:0 0 20px rgba(239,68,68,0.6);'>
-                SYSTEM SHUTDOWN TRIGGERED
-            </div>
+                        text-shadow:0 0 20px rgba(239,68,68,0.6);'>SYSTEM SHUTDOWN TRIGGERED</div>
         </div>
         <div style='font-family:Inter,sans-serif;font-size:0.9rem;color:#c07070;
                     font-weight:400;line-height:1.7;padding-left:2.3rem;'>
@@ -608,18 +560,15 @@ if st.session_state.shutdown:
     """, unsafe_allow_html=True)
 
 # ================================================================
-#  AUTO-REFRESH  —  WHITE SCREEN FIX
-#  The full page renders first. Then we count down second-by-second
-#  in a small placeholder and only call st.rerun() at the very end.
-#  No external library (streamlit-autorefresh) required.
+#  AUTO-REFRESH  —  NO EXTERNAL LIBRARY NEEDED
+#  Page renders fully first, then counts down, then reruns.
 # ================================================================
 elif st.session_state.running:
     countdown = st.empty()
     for remaining in range(UPDATE_INTERVAL_SEC, 0, -1):
         countdown.markdown(
-            f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;"
-            f"color:#2a3a55;text-align:right;padding-right:0.5rem;'>"
-            f"Next update in {remaining}s…</div>",
+            f"<div style='font-family:Inter,sans-serif;font-size:0.7rem;color:#2a3a55;"
+            f"text-align:right;padding-right:0.5rem;'>Next update in {remaining}s…</div>",
             unsafe_allow_html=True,
         )
         time.sleep(1)
